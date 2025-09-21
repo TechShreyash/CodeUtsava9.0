@@ -60,7 +60,7 @@ export default function Home({ skipIntro = false }) {
             </div>
 
             {!revealed ? (
-                <Intro />
+                <Intro onEnterComplete={() => setRevealed(true)} />
             ) : (
                 <>
                     <Hero />

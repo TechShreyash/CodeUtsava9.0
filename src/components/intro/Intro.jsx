@@ -1,278 +1,283 @@
-import { useState, useRef, useEffect } from "react";
-import { useSpring, animated } from "@react-spring/web";
-import Hero from "../hero/Hero.jsx";
-import ropeImg from "../../assets/images/rope.png";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { gsap } from "gsap";
+import introBg from "../../assets/images/welcome.png";
 
-export default function FixedScrollSplit() {
-
-  // Curtain state: 0 = fully closed, 1 = fully open
-  // Curtain state: 0 = fully closed, 1 = fully open
-  const [curtain, setCurtain] = useState(0);
-  const maxCurtain = 1;
-  const minCurtain = 0;
-  const curtainLocked = useRef(false); // lock after fully open
-
-  // Rope drag state
-  const [ropeY, setRopeY] = useState(0); // px from top
-  const ropeStartY = useRef(null);
-  const dragStartY = useRef(null);
-  const maxRopePull = 300; // px to fully open
-  const curtainStep = 0.04; // how much to open per scroll event
-  const touchStartY = useRef(0);
-
-  // Drag handlers for the rope
-  const handleRopeDragStart = (e) => {
-    if (curtainLocked.current) return;
-    if (e.type === "touchstart") {
-      dragStartY.current = e.touches[0].clientY;
-    } else {
-      dragStartY.current = e.clientY;
-    }
-    ropeStartY.current = ropeY;
-    document.addEventListener("mousemove", handleRopeDragMove);
-    document.addEventListener("mouseup", handleRopeDragEnd);
-    document.addEventListener("touchmove", handleRopeDragMove, { passive: false });
-    document.addEventListener("touchend", handleRopeDragEnd);
-  };
-
-  const handleRopeDragMove = (e) => {
-    if (curtainLocked.current) return;
-    let clientY;
-    if (e.type === "touchmove") {
-      clientY = e.touches[0].clientY;
-    } else {
-      clientY = e.clientY;
-    }
-    let delta = clientY - dragStartY.current;
-    let newY = Math.max(0, Math.min(maxRopePull, ropeStartY.current + delta));
-    setRopeY(newY);
-    setCurtain(newY / maxRopePull);
-    if (newY >= maxRopePull) {
-      curtainLocked.current = true;
-    }
-    e.preventDefault && e.preventDefault();
-  };
-
-  const handleRopeDragEnd = () => {
-    document.removeEventListener("mousemove", handleRopeDragMove);
-    document.removeEventListener("mouseup", handleRopeDragEnd);
-    document.removeEventListener("touchmove", handleRopeDragMove);
-    document.removeEventListener("touchend", handleRopeDragEnd);
-    // Snap rope to bottom if fully open
-    if (ropeY >= maxRopePull) setRopeY(maxRopePull);
-  };
-
-  // Curtain animation: left and right panels slide out horizontally
-  // Sway effect: edge of curtain sways as it opens
-  const swayAmplitude = 48; 
-  const swayFrequency = 3;  
-  const sway = Math.sin(curtain * Math.PI * swayFrequency) * swayAmplitude * (1 - curtain);
-
-  // Uniform speed (linear), curtains move fully off-screen (100vw)
-  const leftCurtainSpring = useSpring({
-    to: {
-      transform: `translateX(-${curtain * 100}vw) skewY(${sway / 16}deg)`
-    },
-    config: { duration: 1000, easing: t => t }, // linear, slowed by 50%
-  });
-  const rightCurtainSpring = useSpring({
-    to: {
-      transform: `translateX(${curtain * 100}vw) skewY(-${sway / 16}deg)`
-    },
-    config: { duration: 1000, easing: t => t }, // linear, slowed by 50%
-  });
-
-  // Fade out intro text as curtain opens
-  const textSpring = useSpring({
-    opacity: 1 - curtain * 1.2,
-    transform: `scale(${1 - curtain * 0.1}) translateY(-${curtain * 30}px)`,
-    config: { tension: 120, friction: 20 },
-  });
-  
-  const curtainBase = {
-    background: `
-      linear-gradient(90deg, #7a0d0d 0%, #A11515 10%, #7a0d0d 20%, #A11515 30%, #7a0d0d 40%, #A11515 50%, #7a0d0d 60%, #A11515 70%, #7a0d0d 80%, #A11515 90%, #7a0d0d 100%),
-      repeating-linear-gradient(90deg, #b92a2a 0 6px, transparent 6px 18px),
-      linear-gradient(120deg, #fff3 10%, transparent 60%),
-      linear-gradient(60deg, #fff2 5%, transparent 60%)
-    `,
-    backgroundBlendMode: 'multiply, multiply, lighten, lighten',
-    boxShadow: curtain < 1 ? "0 0 40px 10px #6a0d0d88 inset, 0 0 32px 0 #7a1a1a" : "none",
-    borderTopLeftRadius: "0 0 80px 80px",
-    borderBottomLeftRadius: "80px 80px 0 0",
-    borderTopRightRadius: "0 0 80px 80px",
-    borderBottomRightRadius: "80px 80px 0 0",
-    position: "fixed",
-    top: 0,
-    height: "100%",
-    width: "50vw",
-    zIndex: 30,
-    overflow: "hidden",
-    transition: "box-shadow 0.3s",
-  };
-
-  return (
-    <div className="relative w-screen h-screen overflow-hidden bg-black">
-      {/* Hero behind */}
-      <div className="absolute top-0 left-0 w-full h-full z-0">
-        <Hero />
-      </div>
-
-      <animated.div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 flex flex-col items-center space-y-6"
-        style={textSpring}
-      >
-        
-        {/* Rope puller */}
-        <div
-          style={{
-            position: "relative",
-            width: 64,
-            height: maxRopePull + 80,
-            marginTop: -600,
-            userSelect: "none",
-            zIndex: 50,
-          }}
+function CloudGraphic({ gradientId }) {
+    return (
+        <svg
+            viewBox="0 0 600 320"
+            className="w-[110%] max-w-none drop-shadow-[0_0_60px_rgba(255,255,255,0.35)]"
+            preserveAspectRatio="xMidYMid meet"
         >
-          <img
-            src={ropeImg}
-            alt="Pull the rope to open the curtain"
-            className="rope-img"
-            draggable={false}
-            style={{
-              position: "absolute",
-              left: "50%",                         // always start in the center
-              transform: "translateX(-50%) scale(8)", // keep scaling here
-              top: ropeY,
-              width: 64,
-              height: 80,
-              cursor: curtainLocked.current ? "default" : "grab",
-              transition: curtainLocked.current ? "top 0.3s" : "none",
-              zIndex: 51,
-              filter: curtainLocked.current ? "grayscale(0.7)" : "none",
-            }}
-            onMouseDown={handleRopeDragStart}
-            onTouchStart={handleRopeDragStart}
-          />
-          
-        </div>
-        <div
-            className="text-black text-3xl font-arcade italic uppercase tracking-wider select-none text-gradient bg-clip-text text-transparent transition-opacity duration-300 ease-in-out"
-            style={{ opacity: curtainLocked.current ? 0 : 1, WebkitTextStroke: '1px black', position: 'relative', top: '180px', left: '20px' }}
+            <defs>
+                <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="rgba(255,255,255,0.96)" />
+                    <stop offset="55%" stopColor="rgba(255,240,215,0.98)" />
+                    <stop offset="100%" stopColor="rgba(255,255,255,0.93)" />
+                </linearGradient>
+            </defs>
+            <rect x="60" y="150" width="480" height="140" rx="80" fill={`url(#${gradientId})`} />
+            <circle cx="150" cy="190" r="110" fill={`url(#${gradientId})`} />
+            <circle cx="260" cy="140" r="135" fill={`url(#${gradientId})`} />
+            <circle cx="380" cy="190" r="125" fill={`url(#${gradientId})`} />
+            <circle cx="480" cy="160" r="95" fill={`url(#${gradientId})`} />
+            <circle cx="540" cy="210" r="85" fill={`url(#${gradientId})`} />
+        </svg>
+    );
+}
+
+export default function Intro({ onEnterComplete = () => {} }) {
+    const containerRef = useRef(null);
+    const overlayRef = useRef(null);
+    const leftCloudRef = useRef(null);
+    const rightCloudRef = useRef(null);
+    const contentRef = useRef(null);
+    const ctaRef = useRef(null);
+    const timelineRef = useRef(null);
+    const reduceMotionRef = useRef(false);
+    const [isAnimating, setIsAnimating] = useState(false);
+
+    const leftGradientId = useId();
+    const rightGradientId = useId();
+
+    useEffect(() => {
+        reduceMotionRef.current = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+
+        const ctx = gsap.context(() => {
+            gsap.set(leftCloudRef.current, { xPercent: -125 });
+            gsap.set(rightCloudRef.current, { xPercent: 125 });
+            gsap.set(overlayRef.current, { opacity: 0.2 });
+
+            if (contentRef.current) {
+                gsap.fromTo(
+                    contentRef.current.children,
+                    { y: 24, opacity: 0 },
+                    {
+                        y: 0,
+                        opacity: 1,
+                        duration: 0.9,
+                        stagger: 0.12,
+                        ease: "power3.out",
+                    }
+                );
+            }
+
+            gsap.to(".intro__floating-badge", {
+                y: 6,
+                duration: 2.4,
+                ease: "sine.inOut",
+                repeat: -1,
+                yoyo: true,
+            });
+        }, containerRef);
+
+        return () => ctx.revert();
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            timelineRef.current?.kill();
+        };
+    }, []);
+
+    const startReveal = useCallback(() => {
+        if (isAnimating) return;
+
+        if (reduceMotionRef.current) {
+            onEnterComplete();
+            return;
+        }
+
+        setIsAnimating(true);
+
+        const tl = gsap.timeline({
+            defaults: { ease: "power2.inOut" },
+            onComplete: () => {
+                onEnterComplete();
+            },
+        });
+
+        timelineRef.current = tl;
+
+        tl.to(ctaRef.current, {
+            opacity: 0,
+            yPercent: -20,
+            duration: 0.45,
+            ease: "power3.in",
+        })
+            .to(
+                contentRef.current,
+                {
+                    scale: 0.96,
+                    opacity: 0.9,
+                    filter: "drop-shadow(0 0 30px rgba(12, 8, 24, 0.75))",
+                    duration: 0.8,
+                },
+                "<"
+            )
+            .to(
+                leftCloudRef.current,
+                {
+                    xPercent: -5,
+                    duration: 1.2,
+                    ease: "power3.out",
+                },
+                "<0.05"
+            )
+            .to(
+                rightCloudRef.current,
+                {
+                    xPercent: 5,
+                    duration: 1.2,
+                    ease: "power3.out",
+                },
+                "<"
+            )
+            .to(
+                overlayRef.current,
+                {
+                    opacity: 0.92,
+                    duration: 1.0,
+                    ease: "sine.inOut",
+                },
+                "<"
+            )
+            .to(
+                containerRef.current,
+                {
+                    backgroundColor: "rgba(7, 5, 16, 0.95)",
+                    duration: 1.0,
+                },
+                "<"
+            )
+            .to(
+                leftCloudRef.current,
+                {
+                    xPercent: -160,
+                    duration: 1.25,
+                    ease: "power2.inOut",
+                },
+                "+=0.35"
+            )
+            .to(
+                rightCloudRef.current,
+                {
+                    xPercent: 160,
+                    duration: 1.25,
+                    ease: "power2.inOut",
+                },
+                "<"
+            )
+            .to(
+                [overlayRef.current, contentRef.current],
+                {
+                    opacity: 0,
+                    duration: 0.6,
+                    ease: "power2.in",
+                },
+                "<0.1"
+            )
+            .to(
+                containerRef.current,
+                {
+                    opacity: 0,
+                    duration: 0.6,
+                    ease: "power2.in",
+                },
+                "<0.15"
+            );
+    }, [isAnimating, onEnterComplete]);
+
+    useEffect(() => {
+        const onKeyDown = (event) => {
+            if (event.key === "Enter") {
+                startReveal();
+            }
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [startReveal]);
+
+    return (
+        <section
+            ref={containerRef}
+            className="relative flex h-screen w-screen select-none items-center justify-center overflow-hidden bg-[#070316] text-white"
+        >
+            <div className="absolute inset-0">
+                <img
+                    src={introBg}
+                    alt="CodeUtsava carnival gates"
+                    className="h-full w-full object-cover"
+                    loading="eager"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-[#05020c]/40 via-[#12061e]/70 to-[#040209]/90" />
+            </div>
+
+            <div
+                ref={overlayRef}
+                className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/0 via-white/70 to-white/80 mix-blend-screen"
+                aria-hidden
+            />
+
+            <div className="relative z-20 flex h-full w-full flex-col items-center justify-center px-4 text-center">
+                <div
+                    ref={contentRef}
+                    className="flex max-w-3xl flex-col items-center gap-4 sm:gap-6"
+                >
+                    <span className="text-xs uppercase tracking-[0.55em] text-white/70 sm:text-sm">
+                        National Institute of Technology Raipur Presents
+                    </span>
+
+                    <div className="intro__floating-badge rounded-full border border-white/40 bg-white/10 px-5 py-2 backdrop-blur">
+                        <span className="font-bebas text-sm uppercase tracking-[0.7em] text-accent-2 sm:text-base">
+                            Code Carnival
+                        </span>
+                    </div>
+
+                    <h1 className="px-2 font-rye text-4xl uppercase tracking-widest text-[#F3A83A] drop-shadow-[0_0_25px_rgba(243,168,58,0.45)] sm:text-5xl md:text-6xl lg:text-7xl">
+                        Welcome to CodeUtsava 9.0
+                    </h1>
+
+                    <p className="max-w-2xl text-sm leading-relaxed text-white/85 sm:text-base md:text-lg">
+                        Step into Central India&apos;s grandest coding celebration where creativity meets carnival energy.
+                        Unleash ideas, collaborate with brilliant minds, and set the stage for breakthroughs.
+                    </p>
+
+                    <button
+                        ref={ctaRef}
+                        onClick={startReveal}
+                        className="group relative mt-4 inline-flex items-center gap-3 overflow-hidden rounded-full border-2 border-[#F3A83A]/80 bg-[var(--color-primary)] px-8 py-3 font-bebas text-lg uppercase tracking-[0.6em] text-[#FFE5B4] transition-transform duration-300 hover:scale-105 hover:bg-[var(--color-accent)] hover:text-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F3A83A]/40 sm:px-10 sm:text-xl"
+                        type="button"
+                    >
+                        <span className="text-sm sm:text-base">Enter</span>
+                        <span className="hidden text-xs tracking-[0.6em] text-white/70 sm:inline">
+                            The Carnival
+                        </span>
+                        <span className="absolute inset-y-0 left-0 w-full translate-x-[-105%] bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.65),transparent)] transition-transform duration-700 group-hover:translate-x-[105%]" />
+                    </button>
+                </div>
+            </div>
+
+            <div
+                ref={leftCloudRef}
+                className="pointer-events-none absolute inset-y-0 left-0 z-30 flex w-[125vw] items-center justify-end"
+                style={{ transform: "translateX(-125%)" }}
+                aria-hidden
             >
-            Pull the rope to open
-            <style>{`.text-gradient{background-image:linear-gradient(90deg,#FFD54F,#FF8F00);background-size:200% 100%;animation:shimmer 3s linear infinite}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}`}</style>
-        </div>
+                <CloudGraphic gradientId={leftGradientId} />
+            </div>
 
-      </animated.div>
-
-      {/* Left Curtain with gold trim and pleats */}
-      <animated.div
-        className="curtain-left"
-        style={{
-          ...curtainBase,
-          ...leftCurtainSpring,
-          left: 0,
-          borderRight: "8px solid gold",
-          borderTopLeftRadius: "0 0 80px 80px",
-          borderBottomLeftRadius: "80px 80px 0 0",
-          borderTopRightRadius: 0,
-          borderBottomRightRadius: 0,
-          boxShadow: curtain < 1 ? "8px 0 32px 0 #7a1a1a, 0 0 40px 10px #6a0d0d88 inset" : "none",
-          // Sway edge with clip-path
-          clipPath: `polygon(0 0, calc(100% - ${Math.abs(sway)}px) 0, 100% 50%, calc(100% - ${Math.abs(sway)}px) 100%, 0 100%)`,
-        }}
-      >
-        {/* Subtle velour/fabric texture overlay */}
-        <div style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          opacity: 0.10,
-          background: `repeating-linear-gradient(90deg, #fff1 0 2px, transparent 2px 12px), repeating-linear-gradient(180deg, #fff1 0 1px, transparent 1px 12px)`,
-          pointerEvents: "none"
-        }} />
-      </animated.div>
-
-      {/* Right Curtain with gold trim and pleats */}
-      <animated.div
-        className="curtain-right"
-        style={{
-          ...curtainBase,
-          ...rightCurtainSpring,
-          right: 0,
-          left: "auto",
-          borderLeft: "8px solid gold",
-          borderTopRightRadius: "0 0 80px 80px",
-          borderBottomRightRadius: "80px 80px 0 0",
-          borderTopLeftRadius: 0,
-          borderBottomLeftRadius: 0,
-          boxShadow: curtain < 1 ? "-8px 0 32px 0 #7a1a1a, 0 0 40px 10px #6a0d0d88 inset" : "none",
-          // Sway edge with clip-path
-          clipPath: `polygon(${Math.abs(sway)}px 0, 100% 0, 100% 100%, ${Math.abs(sway)}px 100%, 0 50%)`,
-        }}
-      >
-        <div style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          opacity: 0.10,
-          background: `repeating-linear-gradient(90deg, #fff1 0 2px, transparent 2px 12px), repeating-linear-gradient(180deg, #fff1 0 1px, transparent 1px 12px)`,
-          pointerEvents: "none"
-        }} />
-      </animated.div>
-      {/* Stage shadow as curtains open */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: "50%",
-          width: `${Math.max(0, 100 - curtain * 100)}vw`,
-          height: "100%",
-          transform: "translateX(-50%)",
-          zIndex: 29,
-          pointerEvents: "none",
-          opacity: 0.18 * (1 - curtain),
-          background: "radial-gradient(ellipse at center, #000 0%, transparent 80%)"
-        }}
-      />
-     <style>{`
-        /* 📱 Mobile overrides */
-        @media (max-width: 768px) {
-            .rope-img {
-            left: 50% !important;
-            margin-top:90px;
-            transform: translateX(-50%) scale(7) !important;
-            width: 48px !important;
-            height: 64px !important;
-            }
-            .text-gradient {
-            position: relative !important;
-            top: 180px !important;
-            left: 0 !important;
-            text-align: center !important;
-            width: 100% !important;
-            font-size: 1.25rem !important;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .rope-img {
-            top: 80px !important;
-            transform: translateX(-50%) scale(3.2) !important;
-            width: 40px !important;
-            height: 54px !important;
-            }
-            .text-gradient {
-            font-size: 1rem !important;
-            top: 150px !important;
-            }
-        }
-        `}</style>
-    </div>
-  );
+            <div
+                ref={rightCloudRef}
+                className="pointer-events-none absolute inset-y-0 right-0 z-30 flex w-[125vw] items-center justify-start"
+                style={{ transform: "translateX(125%)" }}
+                aria-hidden
+            >
+                <div style={{ transform: "scaleX(-1)" }}>
+                    <CloudGraphic gradientId={rightGradientId} />
+                </div>
+            </div>
+        </section>
+    );
 }
